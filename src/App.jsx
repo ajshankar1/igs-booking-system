@@ -140,9 +140,23 @@ const TERMS = [
 ];
 
 /* ═══════════════════════════════════════════
-   HELPERS
+   HELPERS & ID GENERATOR
 ═══════════════════════════════════════════ */
-const genId    = () => "IGS" + Date.now().toString().slice(-7);
+// This will generate IGS2026001, IGS2026002 dynamically based on existing bookings
+const generateNextBookingId = (currentBookings) => {
+  const year = new Date().getFullYear(); // e.g. 2026
+  let maxSeq = 0;
+  currentBookings.forEach(b => {
+    if (b.id && b.id.startsWith(`IGS${year}`)) {
+      const seq = parseInt(b.id.substring(7), 10);
+      if (!isNaN(seq) && seq > maxSeq) {
+        maxSeq = seq;
+      }
+    }
+  });
+  return `IGS${year}${String(maxSeq + 1).padStart(3, "0")}`; 
+};
+
 const fmt      = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
 const fmtDate  = (s) => s ? new Date(s + "T00:00:00").toLocaleDateString("en-IN",{ day:"2-digit", month:"long", year:"numeric" }) : "—";
 const todayStr = () => new Date().toISOString().split("T")[0];
@@ -177,10 +191,27 @@ const generateWaMessage = (b) => {
   return encodeURIComponent(msg);
 };
 
+const generateCancelWaMessage = (b) => {
+  let msg = `*Booking Cancellation - IGS Convention Centre* ❌\n`;
+  msg += `-----------------------------------\n`;
+  msg += `*Cancellation No:* CAN-${b.id}\n`;
+  msg += `*Booking ID:* ${b.id}\n\n`;
+  msg += `*Customer:* ${fullName(b)}\n`;
+  msg += `*Event Date:* ${fmtDate(b.eventDate)}\n`;
+  msg += `*Hall:* ${hallLabel(b.hallId)}\n\n`;
+  msg += `*Refund Details:*\n`;
+  msg += `Advance Paid: ${fmt(b.advanceAmount)}\n`;
+  msg += `Retention Kept: ${fmt(b.retentionAmount)}\n`;
+  msg += `*Total Refundable: ${fmt(b.refundAmount)}*\n\n`;
+  msg += `Your cancellation has been processed successfully. If a refund is applicable, it will be processed shortly.\n\n`;
+  msg += `Contact: +91 98416 08160 | sreeganesamahal@gmail.com`;
+  return encodeURIComponent(msg);
+};
+
 /* ═══════════════════════════════════════════
    STORAGE — localStorage
 ═══════════════════════════════════════════ */
-const STORAGE_KEY = "igs_bookings_v2";
+const STORAGE_KEY = "igs_bookings_v3"; // updated key for clean sequence tracking
 const loadBookings = () => {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
   catch { return []; }
@@ -233,7 +264,7 @@ const Btn = ({ icon, title, onClick, bg }) => (
 );
 
 /* ═══════════════════════════════════════════
-   PRINT DOCUMENT — Invoice / Receipt / Quotation
+   PRINT DOCUMENT — Invoice / Receipt / Quotation / Cancellation
 ═══════════════════════════════════════════ */
 function PrintDoc({ type, booking, onClose }) {
   const base    = booking.baseAmount || 0;
@@ -242,11 +273,14 @@ function PrintDoc({ type, booking, onClose }) {
   const adv     = booking.advanceAmount || 0;
   const balance = tot - adv;
   const name    = fullName(booking);
-  const isInv   = type === "invoice";
-  const isRcp   = type === "receipt";
-  const isQt    = type === "quotation";
-  const docNo   = isInv ? "INV-" + booking.id : isRcp ? "RCP-" + booking.id : "QT-" + booking.id;
-  const docTitle= isInv ? "— TAX INVOICE —" : isRcp ? "— ADVANCE RECEIPT —" : "— QUOTATION —";
+  
+  const isInv    = type === "invoice";
+  const isRcp    = type === "receipt";
+  const isQt     = type === "quotation";
+  const isCancel = type === "cancellation";
+  
+  const docNo    = isInv ? "INV-" + booking.id : isRcp ? "RCP-" + booking.id : isCancel ? "CAN-" + booking.id : "QT-" + booking.id;
+  const docTitle = isInv ? "— TAX INVOICE —" : isRcp ? "— ADVANCE RECEIPT —" : isCancel ? "— CANCELLATION RECEIPT —" : "— QUOTATION —";
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.78)",
@@ -261,10 +295,10 @@ function PrintDoc({ type, booking, onClose }) {
       <div style={{ background:"white", width:"100%", maxWidth:760, maxHeight:"95vh",
         overflowY:"auto", borderRadius:6, boxShadow:"0 24px 64px rgba(0,0,0,.5)" }}>
         {/* Toolbar */}
-        <div style={{ background:"#5C0E0E", padding:"11px 18px", display:"flex",
+        <div style={{ background:isCancel ? "#B71C1C" : "#5C0E0E", padding:"11px 18px", display:"flex",
           justifyContent:"space-between", alignItems:"center" }}>
           <span style={{ color:"white", fontWeight:700, fontSize:14 }}>
-            {isQt ? "📋 Quotation" : isInv ? "📄 Invoice" : "🧾 Advance Receipt"} — {docNo}
+            {isQt ? "📋 Quotation" : isInv ? "📄 Invoice" : isCancel ? "📄 Cancellation Receipt" : "🧾 Advance Receipt"} — {docNo}
           </span>
           <div style={{ display:"flex", gap:8 }}>
             <button onClick={() => window.print()} style={{
@@ -281,19 +315,19 @@ function PrintDoc({ type, booking, onClose }) {
           {/* Letterhead */}
           <div style={{ textAlign:"center", marginBottom:22, paddingBottom:18, borderBottom:"3px double #C9A227" }}>
             <div style={{ fontSize:8, letterSpacing:8, color:"#C9A227", marginBottom:6 }}>✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦ ✦</div>
-            <div style={{ fontSize:30, fontWeight:700, color:"#5C0E0E", letterSpacing:2 }}>🕉️ IGS Convention Centre</div>
+            <div style={{ fontSize:30, fontWeight:700, color:isCancel ? "#B71C1C" : "#5C0E0E", letterSpacing:2 }}>🕉️ IGS Convention Centre</div>
             <div style={{ fontSize:12, color:"#7B1818", fontWeight:600, letterSpacing:3, textTransform:"uppercase", marginTop:3 }}>
               Tirunelveli's Premier Convention Venue
             </div>
             <div style={{ fontSize:11.5, color:"#666", marginTop:7, lineHeight:1.8 }}>
-              51/4A, 4B Ambai Road, Palayamkottai, Tirunelveli – 627002<br/>
+              51/4A, 4B Ambai Road, Palayamkottai, Tirunelveli – 627005<br/>
               📞 +91 98416 08160 &nbsp;|&nbsp; ✉ sreeganesamahal@gmail.com &nbsp;|&nbsp; GSTIN: {VENUE.gstin}
             </div>
           </div>
 
           {/* Doc title */}
           <div style={{ textAlign:"center", marginBottom:22 }}>
-            <span style={{ display:"inline-block", background:"#5C0E0E", color:"white",
+            <span style={{ display:"inline-block", background:isCancel ? "#B71C1C" : "#5C0E0E", color:"white",
               padding:"6px 36px", fontSize:15, fontWeight:700, letterSpacing:4 }}>{docTitle}</span>
           </div>
 
@@ -304,7 +338,7 @@ function PrintDoc({ type, booking, onClose }) {
               <div style={{ fontSize:10, color:"#888", letterSpacing:2, textTransform:"uppercase", marginBottom:4 }}>
                 {isQt ? "Prepared For" : "Bill To"}
               </div>
-              <div style={{ fontSize:17, fontWeight:700, color:"#5C0E0E" }}>{name}</div>
+              <div style={{ fontSize:17, fontWeight:700, color:isCancel ? "#B71C1C" : "#5C0E0E" }}>{name}</div>
               {booking.primaryCc && <div style={{ fontSize:13, marginTop:3 }}>📞 {booking.primaryCc} {booking.primaryPhone}</div>}
               {booking.alternateCc && booking.alternatePhone &&
                 <div style={{ fontSize:12, color:"#666" }}>📞 {booking.alternateCc} {booking.alternatePhone} (Alt)</div>}
@@ -325,8 +359,8 @@ function PrintDoc({ type, booking, onClose }) {
               <table style={{ borderCollapse:"collapse", fontSize:13 }}>
                 <tbody>
                   {[
-                    [isQt ? "Quotation No" : isInv ? "Invoice No" : "Receipt No", docNo],
-                    ["Date", fmtDate(todayStr())],
+                    [isQt ? "Quotation No" : isInv ? "Invoice No" : isCancel ? "Cancellation No" : "Receipt No", docNo],
+                    [isCancel ? "Cancelled On" : "Date", fmtDate(isCancel ? booking.cancelledOn : todayStr())],
                     ["Event Date", fmtDate(booking.eventDate)],
                     ["Event", booking.eventType],
                     ["Hall", hallLabel(booking.hallId)],
@@ -346,7 +380,7 @@ function PrintDoc({ type, booking, onClose }) {
           {/* Items table */}
           <table style={{ width:"100%", borderCollapse:"collapse" }}>
             <thead>
-              <tr style={{ background:"#5C0E0E", color:"white" }}>
+              <tr style={{ background:isCancel ? "#B71C1C" : "#5C0E0E", color:"white" }}>
                 <th style={{ padding:"10px 14px", textAlign:"left", fontSize:13 }}>Description</th>
                 <th style={{ padding:"10px 14px", textAlign:"right", fontSize:13 }}>Base Rent</th>
                 <th style={{ padding:"10px 14px", textAlign:"right", fontSize:13 }}>GST 18%</th>
@@ -356,10 +390,13 @@ function PrintDoc({ type, booking, onClose }) {
             <tbody>
               <tr>
                 <td style={{ padding:"16px 14px", borderBottom:"1px solid #e0d0b0" }}>
-                  <div style={{ fontWeight:700, fontSize:15 }}>{booking.eventType} — {hallLabel(booking.hallId)}</div>
+                  <div style={{ fontWeight:700, fontSize:15, color: isCancel ? "#B71C1C" : "#222" }}>
+                    {booking.eventType} — {hallLabel(booking.hallId)} {isCancel && "(CANCELLED)"}
+                  </div>
                   <div style={{ fontSize:12, color:"#777", marginTop:4 }}>Slot: {slotLabel(booking.slotId)}</div>
                   <div style={{ fontSize:12, color:"#777" }}>Event Date: {fmtDate(booking.eventDate)}</div>
                   {booking.notes && <div style={{ fontSize:12, color:"#888", marginTop:3 }}>Note: {booking.notes}</div>}
+                  {isCancel && booking.cancelReason && <div style={{ fontSize:12, color:"#B71C1C", marginTop:3 }}>Cancellation Reason: {booking.cancelReason}</div>}
                 </td>
                 <td style={{ padding:"16px 14px", textAlign:"right", borderBottom:"1px solid #e0d0b0" }}>{fmt(base)}</td>
                 <td style={{ padding:"16px 14px", textAlign:"right", borderBottom:"1px solid #e0d0b0", color:"#555" }}>{fmt(gstAmt)}</td>
@@ -367,7 +404,26 @@ function PrintDoc({ type, booking, onClose }) {
               </tr>
             </tbody>
             <tfoot>
-              {isInv ? (
+              {isCancel ? (
+                <>
+                  <tr style={{ background:"#f9f5ed" }}>
+                    <td colSpan={3} style={{ padding:"10px 14px", textAlign:"right", color:"#555" }}>Total Booking Amount (incl. GST)</td>
+                    <td style={{ padding:"10px 14px", textAlign:"right", fontWeight:700 }}>{fmt(tot)}</td>
+                  </tr>
+                  <tr style={{ background:"#f9f5ed" }}>
+                    <td colSpan={3} style={{ padding:"10px 14px", textAlign:"right", color:"#555" }}>Advance Received ({booking.paymentMode || "—"})</td>
+                    <td style={{ padding:"10px 14px", textAlign:"right", fontWeight:700 }}>{fmt(adv)}</td>
+                  </tr>
+                  <tr style={{ background:"#FFEBEE", color:"#B71C1C" }}>
+                    <td colSpan={3} style={{ padding:"13px 14px", textAlign:"right", fontWeight:700, fontSize:14 }}>Retention Charges Kept</td>
+                    <td style={{ padding:"13px 14px", textAlign:"right", fontWeight:700, fontSize:15 }}>{fmt(booking.retentionAmount || 0)}</td>
+                  </tr>
+                  <tr style={{ background:"#E8F5E9", color:"#1B5E20" }}>
+                    <td colSpan={3} style={{ padding:"13px 14px", textAlign:"right", fontWeight:700, fontSize:15 }}>Total Refundable Amount</td>
+                    <td style={{ padding:"13px 14px", textAlign:"right", fontWeight:700, fontSize:20 }}>{fmt(booking.refundAmount || 0)}</td>
+                  </tr>
+                </>
+              ) : isInv ? (
                 <>
                   <tr style={{ background:"#f9f5ed" }}>
                     <td colSpan={3} style={{ padding:"10px 14px", textAlign:"right", color:"#2D6A4F" }}>
@@ -427,7 +483,7 @@ function PrintDoc({ type, booking, onClose }) {
 
           {/* Terms */}
           <div style={{ marginTop:22, borderTop:"2px solid #e0d0b0", paddingTop:16 }}>
-            <div style={{ fontWeight:700, color:"#5C0E0E", marginBottom:8, fontSize:13 }}>Terms & Conditions</div>
+            <div style={{ fontWeight:700, color:isCancel ? "#B71C1C" : "#5C0E0E", marginBottom:8, fontSize:13 }}>Terms & Conditions</div>
             <ol style={{ paddingLeft:18, fontSize:11.5, color:"#555", lineHeight:1.85 }}>
               {TERMS.map((t, i) => <li key={i}>{t}</li>)}
             </ol>
@@ -440,14 +496,14 @@ function PrintDoc({ type, booking, onClose }) {
             </div>
             <div style={{ textAlign:"right" }}>
               <div style={{ marginTop:40, borderTop:"1px solid #555", paddingTop:5, fontSize:12, color:"#444" }}>Authorised Signature</div>
-              <div style={{ fontWeight:700, color:"#5C0E0E", marginTop:3 }}>IGS Convention Centre</div>
+              <div style={{ fontWeight:700, color:isCancel ? "#B71C1C" : "#5C0E0E", marginTop:3 }}>IGS Convention Centre</div>
             </div>
           </div>
           <div style={{ textAlign:"center", marginTop:20, color:"#C9A227", fontSize:11, letterSpacing:2 }}>
             ✦ THANK YOU FOR CHOOSING IGS CONVENTION CENTRE ✦
           </div>
           <div style={{ textAlign:"center", marginTop:4, fontSize:10.5, color:"#aaa" }}>
-            +91 98416 08160 · sreeganesamahal@gmail.com · 51/4A, 4B Ambai Road, Palayamkottai, Tirunelveli – 627002
+            +91 98416 08160 · sreeganesamahal@gmail.com · 51/4A, 4B Ambai Road, Palayamkottai, Tirunelveli – 627005
           </div>
         </div>
       </div>
@@ -456,7 +512,7 @@ function PrintDoc({ type, booking, onClose }) {
 }
 
 /* ═══════════════════════════════════════════
-   SUCCESS / WHATSAPP MODAL
+   SUCCESS MODAL
 ═══════════════════════════════════════════ */
 function SuccessModal({ booking, onClose, onPrint }) {
   const waMsg = generateWaMessage(booking);
@@ -484,7 +540,6 @@ function SuccessModal({ booking, onClose, onPrint }) {
         </div>
 
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-          {/* PRIMARY ACTION - PRINT INVOICE */}
           <button onClick={() => { onPrint("invoice", booking); onClose(); }} style={{
             width:"100%", background:"#5C0E0E", color:"white", border:"none",
             padding:"14px", borderRadius:5, fontWeight:700, fontSize:16, cursor:"pointer" }}>
@@ -497,7 +552,6 @@ function SuccessModal({ booking, onClose, onPrint }) {
               padding:"10px", borderRadius:5, fontWeight:700, fontSize:13 }}>
               💬 WA to Guest
             </a>
-            
             <a href={`https://api.whatsapp.com/send?phone=${ownerPhone}&text=${waMsg}`} target="_blank" rel="noreferrer"
               style={{ flex:1, display:"block", background:"#128C7E", color:"white", textDecoration:"none",
               padding:"10px", borderRadius:5, fontWeight:700, fontSize:13 }}>
@@ -509,6 +563,64 @@ function SuccessModal({ booking, onClose, onPrint }) {
             width:"100%", background:"#f5f5f5", color:"#333", border:"1px solid #ddd",
             padding:"12px", borderRadius:5, fontWeight:700, fontSize:14, marginTop:4, cursor:"pointer" }}>
             Done / Go to Dashboard
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   SUCCESS CANCELLATION MODAL
+═══════════════════════════════════════════ */
+function SuccessCancelModal({ booking, onClose, onPrint }) {
+  const waMsg = generateCancelWaMessage(booking);
+  const guestPhone = (booking.primaryCc || "").replace("+", "") + booking.primaryPhone.replace(/\D/g, "");
+  const ownerPhone = "919841608160";
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)",
+      zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"white", borderRadius:8, padding:32, maxWidth:500, width:"100%",
+        boxShadow:"0 20px 60px rgba(0,0,0,.4)", textAlign:"center" }}>
+        
+        <div style={{ fontSize:48, marginBottom:10 }}>❌</div>
+        <div style={{ fontFamily:"'Playfair Display',serif", fontSize:24, fontWeight:700,
+          color:"#B71C1C", marginBottom:6 }}>Booking Cancelled!</div>
+        <div style={{ color:"#666", marginBottom:24, fontSize:14 }}>
+          Booking <strong>{booking.id}</strong> has been successfully cancelled.
+        </div>
+
+        <div style={{ background:"#FFEBEE", border:"1px solid #FFCDD2", borderRadius:6, padding:"16px", marginBottom:24, textAlign:"left" }}>
+          <div style={{ fontSize:13, color:"#B71C1C", marginBottom:4 }}><strong>Cancellation No:</strong> CAN-{booking.id}</div>
+          <div style={{ fontSize:13, color:"#B71C1C", marginBottom:4 }}><strong>Refund Amount:</strong> {fmt(booking.refundAmount)}</div>
+          <div style={{ fontSize:13, color:"#B71C1C" }}><strong>Retention Kept:</strong> {fmt(booking.retentionAmount)}</div>
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <button onClick={() => { onPrint("cancellation", booking); onClose(); }} style={{
+            width:"100%", background:"#B71C1C", color:"white", border:"none",
+            padding:"14px", borderRadius:5, fontWeight:700, fontSize:16, cursor:"pointer" }}>
+            📄 Print Cancellation Receipt
+          </button>
+
+          <div style={{ display:"flex", gap:10, marginTop:4 }}>
+            <a href={`https://api.whatsapp.com/send?phone=${guestPhone}&text=${waMsg}`} target="_blank" rel="noreferrer"
+              style={{ flex:1, display:"block", background:"#25D366", color:"white", textDecoration:"none",
+              padding:"10px", borderRadius:5, fontWeight:700, fontSize:13 }}>
+              💬 WA to Guest
+            </a>
+            <a href={`https://api.whatsapp.com/send?phone=${ownerPhone}&text=${waMsg}`} target="_blank" rel="noreferrer"
+              style={{ flex:1, display:"block", background:"#128C7E", color:"white", textDecoration:"none",
+              padding:"10px", borderRadius:5, fontWeight:700, fontSize:13 }}>
+              📱 WA to Owner
+            </a>
+          </div>
+
+          <button onClick={onClose} style={{
+            width:"100%", background:"#f5f5f5", color:"#333", border:"1px solid #ddd",
+            padding:"12px", borderRadius:5, fontWeight:700, fontSize:14, marginTop:4, cursor:"pointer" }}>
+            Done
           </button>
         </div>
       </div>
@@ -568,13 +680,11 @@ function BookingForm({ existing, onSave, onCancel }) {
     setErrorMsg("");
     onSave({
       ...form,
-      id:           existing?.id || genId(),
       createdOn:    existing?.createdOn || todayStr(),
       baseAmount:   base,
       gstAmount:    gstA,
       totalAmount:  totA,
       advanceAmount: adv,
-      status:       existing?.status === "Cancelled" ? "Cancelled" : "Active",
     });
   };
 
@@ -637,7 +747,7 @@ function BookingForm({ existing, onSave, onCancel }) {
             {INDIAN_STATES.map(s => <option key={s}>{s}</option>)}
           </select>
         </Fld>
-        <Fld label="PIN Code" req><input style={INP} value={form.pinCode} onChange={set("pinCode")} placeholder="627002" maxLength={6} /></Fld>
+        <Fld label="PIN Code" req><input style={INP} value={form.pinCode} onChange={set("pinCode")} placeholder="627005" maxLength={6} /></Fld>
       </div>
 
       {/* ── EVENT ── */}
@@ -943,6 +1053,7 @@ function BookingsList({ bookings, onEdit, onPrint, onCancel, onRestore, onDelete
                       </>}
                       {isCancelled && (
                         <>
+                          <Btn icon="📄" title="Cancellation Receipt" onClick={() => onPrint("cancellation", b)} bg="#ffebee" />
                           <Btn icon="↩️" title="Restore Booking" onClick={() => onRestore(b.id)}             bg="#e8f5e9" />
                           <Btn icon="🗑️" title="Permanently Delete" onClick={() => onDelete(b.id)}           bg="#ffebeb" />
                         </>
@@ -1479,30 +1590,59 @@ export default function App() {
   const [cancelling, setCancelling] = useState(null);
   const [deleting, setDeleting]     = useState(null);
   const [successBooking, setSuccessBooking] = useState(null);
+  const [successCancelBooking, setSuccessCancelBooking] = useState(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => { saveBookings(bookings); }, [bookings]);
 
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const saveBooking = (b) => {
+    let finalBooking = { ...b };
+    
+    if (!finalBooking.id) {
+      // Create new sequence ID
+      finalBooking.id = generateNextBookingId(bookings);
+      finalBooking.status = "Active";
+    } else {
+      // Edit existing
+      const existing = bookings.find(x => x.id === finalBooking.id);
+      if (existing && existing.status !== "Quoted") {
+         finalBooking.status = finalBooking.status === "Active" ? "Modified" : finalBooking.status;
+      }
+    }
+
     setBookings(prev => {
-      const idx = prev.findIndex(x => x.id === b.id);
+      const idx = prev.findIndex(x => x.id === finalBooking.id);
       if (idx >= 0) {
         const n = [...prev];
-        n[idx] = { ...b, status: b.status === "Active" && prev[idx].status !== "Quoted" ? "Modified" : b.status };
-        if (prev[idx].id !== b.id || !prev.find(x=>x.id===b.id)) n[idx].status = "Active";
+        n[idx] = finalBooking;
         return n;
       }
-      return [...prev, { ...b, status:"Active" }];
+      return [...prev, finalBooking];
     });
+
     setEditing(null);
-    setSuccessBooking(b);
+    setSuccessBooking(finalBooking);
   };
 
   const handleCancel = (id, reason, retention, refund) => {
-    setBookings(prev => prev.map(b => b.id===id ? {
-      ...b, status:"Cancelled", cancelReason:reason, cancelledOn:todayStr(),
-      retentionAmount: retention, refundAmount: refund
-    } : b));
+    let cancelledB = null;
+    setBookings(prev => prev.map(b => {
+      if (b.id === id) {
+        cancelledB = {
+          ...b, status:"Cancelled", cancelReason:reason, cancelledOn:todayStr(),
+          retentionAmount: retention, refundAmount: refund
+        };
+        return cancelledB;
+      }
+      return b;
+    }));
     setCancelling(null);
+    if (cancelledB) setSuccessCancelBooking(cancelledB);
   };
 
   const handleRestore = (id) => {
@@ -1549,6 +1689,16 @@ export default function App() {
           }} 
         />
       )}
+      {successCancelBooking && (
+        <SuccessCancelModal 
+          booking={successCancelBooking} 
+          onPrint={(type, b) => setPrintDoc({ type, booking: b })}
+          onClose={() => {
+            setSuccessCancelBooking(null);
+            setActiveTab("bookings");
+          }} 
+        />
+      )}
       {cancelling && (
         <CancelModal
           booking={cancelling}
@@ -1575,10 +1725,12 @@ export default function App() {
           </div>
         </div>
         <div style={{ textAlign:"right" }}>
-          <div style={{ color:"rgba(255,255,255,.7)", fontSize:12 }}>
-            {new Date().toLocaleDateString("en-IN",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
+          <div style={{ color:"rgba(255,255,255,.7)", fontSize:13 }}>
+            {currentTime.toLocaleDateString("en-IN",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}
+            &nbsp;·&nbsp;
+            <strong>{currentTime.toLocaleTimeString("en-IN", {hour: '2-digit', minute:'2-digit', second: '2-digit', hour12: true})}</strong>
           </div>
-          <div style={{ color:"#C9A227", fontSize:11, marginTop:3 }}>📍 Palayamkottai, Tirunelveli · 📞 +91 98416 08160</div>
+          <div style={{ color:"#C9A227", fontSize:11, marginTop:4 }}>📍 Palayamkottai, Tirunelveli · 📞 +91 98416 08160</div>
           <div style={{ color:"rgba(255,255,255,.5)", fontSize:10, marginTop:2 }}>sreeganesamahal@gmail.com</div>
         </div>
       </div>
@@ -1648,7 +1800,7 @@ export default function App() {
 
       <div style={{ background:"#3D0808", color:"rgba(255,255,255,.45)",
         textAlign:"center", padding:"12px", fontSize:11 }}>
-        © 2026 IGS Convention Centre · 51/4A, 4B Ambai Road, Palayamkottai, Tirunelveli – 627002
+        © 2026 IGS Convention Centre · 51/4A, 4B Ambai Road, Palayamkottai, Tirunelveli – 627005
         · +91 98416 08160 · sreeganesamahal@gmail.com
       </div>
     </div>
