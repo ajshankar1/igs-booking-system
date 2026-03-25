@@ -142,9 +142,8 @@ const TERMS = [
 /* ═══════════════════════════════════════════
    HELPERS & ID GENERATOR
 ═══════════════════════════════════════════ */
-// This will generate IGS2026001, IGS2026002 dynamically based on existing bookings
 const generateNextBookingId = (currentBookings) => {
-  const year = new Date().getFullYear(); // e.g. 2026
+  const year = new Date().getFullYear();
   let maxSeq = 0;
   currentBookings.forEach(b => {
     if (b.id && b.id.startsWith(`IGS${year}`)) {
@@ -211,7 +210,7 @@ const generateCancelWaMessage = (b) => {
 /* ═══════════════════════════════════════════
    STORAGE — localStorage
 ═══════════════════════════════════════════ */
-const STORAGE_KEY = "igs_bookings_v3"; // updated key for clean sequence tracking
+const STORAGE_KEY = "igs_bookings_v3"; 
 const loadBookings = () => {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
   catch { return []; }
@@ -262,6 +261,130 @@ const Btn = ({ icon, title, onClick, bg }) => (
     {icon}
   </button>
 );
+
+/* ═══════════════════════════════════════════
+   VIEW MODAL — Read-Only Booking Details & History
+═══════════════════════════════════════════ */
+function ViewModal({ booking, onClose }) {
+  if (!booking) return null;
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)",
+      zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div style={{ background:"white", borderRadius:8, padding:28, maxWidth:760, width:"100%",
+        boxShadow:"0 20px 60px rgba(0,0,0,.4)", maxHeight:"90vh", overflowY:"auto" }}>
+        
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, borderBottom:"2px solid #f0e8d8", paddingBottom:12 }}>
+          <div style={{ fontFamily:"'Playfair Display',serif", fontSize:21, fontWeight:700, color:"#5C0E0E" }}>
+            👁️ Booking Details
+          </div>
+          <button onClick={onClose} style={{ background:"#f5f5f5", color:"#333", border:"1px solid #ddd", padding:"6px 12px", borderRadius:5, fontWeight:700, cursor:"pointer" }}>
+            ✕ Close
+          </button>
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
+          {/* Customer Details */}
+          <div style={{ background:"#FBF5E6", padding:16, borderRadius:6, border:"1px solid #e8d8b8" }}>
+            <h4 style={{ color:"#C9A227", marginBottom:10, textTransform:"uppercase", fontSize:12, letterSpacing:1 }}>Customer Details</h4>
+            <div style={{ fontSize:14, marginBottom:6 }}><strong>Booking ID:</strong> {booking.id}</div>
+            <div style={{ fontSize:14, marginBottom:6 }}><strong>Name:</strong> {fullName(booking)}</div>
+            <div style={{ fontSize:14, marginBottom:6 }}><strong>Phone:</strong> {booking.primaryCc} {booking.primaryPhone}</div>
+            {booking.alternatePhone && <div style={{ fontSize:14, marginBottom:6 }}><strong>Alt Phone:</strong> {booking.alternateCc} {booking.alternatePhone}</div>}
+            <div style={{ fontSize:14, marginBottom:6 }}><strong>Email:</strong> {booking.email || "—"}</div>
+            <div style={{ fontSize:14, marginBottom:6 }}><strong>Address:</strong> {[booking.address1, booking.city, booking.state].filter(Boolean).join(", ")}</div>
+          </div>
+
+          {/* Event Details */}
+          <div style={{ background:"#FBF5E6", padding:16, borderRadius:6, border:"1px solid #e8d8b8" }}>
+            <h4 style={{ color:"#C9A227", marginBottom:10, textTransform:"uppercase", fontSize:12, letterSpacing:1 }}>Event Details</h4>
+            <div style={{ fontSize:14, marginBottom:6 }}><strong>Status:</strong> <StatusBadge status={booking.status} /></div>
+            <div style={{ fontSize:14, marginBottom:6 }}><strong>Event Type:</strong> {booking.eventType}</div>
+            <div style={{ fontSize:14, marginBottom:6 }}><strong>Event Date:</strong> {fmtDate(booking.eventDate)}</div>
+            <div style={{ fontSize:14, marginBottom:6 }}><strong>Hall / Venue:</strong> {hallLabel(booking.hallId)}</div>
+            <div style={{ fontSize:14, marginBottom:6 }}><strong>Booking Slot:</strong> {slotLabel(booking.slotId)}</div>
+            <div style={{ fontSize:14, marginBottom:6 }}><strong>Guests / Catering:</strong> {booking.guestCount || "—"} / {booking.catering}</div>
+          </div>
+        </div>
+
+        {/* Financial Details */}
+        <div style={{ background:"#f9f9f9", padding:16, borderRadius:6, border:"1px solid #ddd", marginTop:20 }}>
+          <h4 style={{ color:"#555", marginBottom:10, textTransform:"uppercase", fontSize:12, letterSpacing:1 }}>Financial Summary</h4>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:10 }}>
+            <div>
+              <div style={{fontSize:11, color:"#888"}}>Total Amount (incl. GST)</div>
+              <div style={{fontSize:16, fontWeight:700}}>{fmt(booking.totalAmount)}</div>
+            </div>
+            <div>
+              <div style={{fontSize:11, color:"#888"}}>Advance Paid</div>
+              <div style={{fontSize:16, fontWeight:700, color:"#2D6A4F"}}>{fmt(booking.advanceAmount)}</div>
+            </div>
+            <div>
+              <div style={{fontSize:11, color:"#888"}}>Balance Due</div>
+              <div style={{fontSize:16, fontWeight:700, color:"#C9A227"}}>{fmt((booking.totalAmount || 0) - (booking.advanceAmount || 0))}</div>
+            </div>
+            <div>
+              <div style={{fontSize:11, color:"#888"}}>Payment Mode</div>
+              <div style={{fontSize:14, fontWeight:600, marginTop:2}}>{booking.paymentMode || "—"}</div>
+            </div>
+          </div>
+
+          {booking.status === "Cancelled" && (
+            <div style={{ marginTop:16, padding:12, background:"#FFEBEE", borderRadius:6, border:"1px solid #FFCDD2" }}>
+              <strong style={{color:"#B71C1C", display:"block", marginBottom:4}}>Cancellation Details:</strong>
+              <div style={{ fontSize:13, color:"#B71C1C" }}>
+                <strong>Refund Processed:</strong> {fmt(booking.refundAmount)} &nbsp;|&nbsp; 
+                <strong>Retention Kept:</strong> {fmt(booking.retentionAmount)}<br/>
+                <strong>Reason:</strong> {booking.cancelReason || "No reason provided"}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {booking.notes && (
+          <div style={{ marginTop:20, padding:16, background:"#fff", border:"1px solid #eee", borderRadius:6 }}>
+            <h4 style={{ color:"#555", marginBottom:6, textTransform:"uppercase", fontSize:12, letterSpacing:1 }}>Special Notes</h4>
+            <div style={{ fontSize:14, color:"#333", lineHeight:1.6 }}>{booking.notes}</div>
+          </div>
+        )}
+
+        {/* ACTIVITY LOG - MODIFICATION HISTORY */}
+        {booking.history && booking.history.length > 0 && (
+          <div style={{ marginTop:20, padding:16, background:"#fff", border:"1px solid #eee", borderRadius:6 }}>
+            <h4 style={{ color:"#555", marginBottom:12, textTransform:"uppercase", fontSize:12, letterSpacing:1 }}>⏳ Activity & Modification Log</h4>
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {booking.history.map((h, idx) => {
+                let borderColor = "#1B5E20"; // Created/Restored
+                if (h.action === "Modified") borderColor = "#E65100";
+                if (h.action === "Cancelled") borderColor = "#B71C1C";
+
+                return (
+                  <div key={idx} style={{ padding:"10px 14px", background:"#f9f9f9", borderRadius:4, borderLeft:`4px solid ${borderColor}` }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:"#333", marginBottom:4 }}>
+                      {h.action} <span style={{ fontWeight:400, color:"#888" }}>on {new Date(h.date).toLocaleString("en-IN")}</span>
+                    </div>
+                    {h.action === "Modified" && (
+                      <div style={{ fontSize:12, color:"#555", lineHeight:1.6 }}>
+                        <strong>Previous Value:</strong><br/>
+                        Event Date: {fmtDate(h.previousDate)} &nbsp;|&nbsp; 
+                        Hall: {hallLabel(h.previousHall)} &nbsp;|&nbsp; 
+                        Total: {fmt(h.previousTotal)} &nbsp;|&nbsp; 
+                        Advance: {fmt(h.previousAdvance)}
+                      </div>
+                    )}
+                    {h.action === "Cancelled" && (
+                      <div style={{ fontSize:12, color:"#B71C1C" }}>Reason: {h.reason || "None"}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /* ═══════════════════════════════════════════
    PRINT DOCUMENT — Invoice / Receipt / Quotation / Cancellation
@@ -873,7 +996,7 @@ function BookingForm({ existing, onSave, onCancel }) {
 /* ═══════════════════════════════════════════
    DASHBOARD
 ═══════════════════════════════════════════ */
-function Dashboard({ bookings, onTab, onNew }) {
+function Dashboard({ bookings, onTab, onNew, onView, onEdit, onCancel }) {
   const today    = todayStr();
   const active   = bookings.filter(b => b.status !== "Cancelled");
   const upcoming = active.filter(b => b.eventDate >= today);
@@ -934,10 +1057,11 @@ function Dashboard({ bookings, onTab, onNew }) {
           <table style={{ width:"100%", borderCollapse:"collapse", minWidth:800 }}>
             <thead>
               <tr style={{ background:"#FBF5E6" }}>
-                {["ID","Customer","Event","Date","Hall","Total","Balance","Status"].map(h => (
+                {["ID","Customer","Event","Date","Hall","Total","Status"].map(h => (
                   <th key={h} style={{ padding:"10px 12px", textAlign:"left", fontSize:11,
                     color:"#888", fontWeight:700, textTransform:"uppercase" }}>{h}</th>
                 ))}
+                <th style={{ padding:"10px 12px", textAlign:"right", fontSize:11, color:"#888", fontWeight:700, textTransform:"uppercase" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -955,10 +1079,18 @@ function Dashboard({ bookings, onTab, onNew }) {
                   <td style={{ padding:"11px 12px", fontSize:12, whiteSpace:"nowrap" }}>{fmtDate(b.eventDate)}</td>
                   <td style={{ padding:"11px 12px", fontSize:12 }}>{hallLabel(b.hallId)}</td>
                   <td style={{ padding:"11px 12px", fontWeight:700 }}>{fmt(b.totalAmount)}</td>
-                  <td style={{ padding:"11px 12px", fontWeight:700, color:(b.totalAmount-b.advanceAmount)>0?"#C9A227":"#2D6A4F" }}>
-                    {fmt(b.totalAmount - b.advanceAmount)}
-                  </td>
                   <td style={{ padding:"11px 12px" }}><StatusBadge status={b.status} /></td>
+                  <td style={{ padding:"11px 12px", textAlign:"right" }}>
+                    <div style={{ display:"flex", gap:4, justifyContent:"flex-end" }}>
+                      <Btn icon="👁️" title="View Details" onClick={() => onView(b)} bg="#e3f2fd" />
+                      {b.status !== "Cancelled" && (
+                        <>
+                          <Btn icon="✏️" title="Edit Booking" onClick={() => onEdit(b)} bg="#f0f0f0" />
+                          <Btn icon="❌" title="Cancel Booking" onClick={() => onCancel(b.id)} bg="#fff0f0" />
+                        </>
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -972,7 +1104,7 @@ function Dashboard({ bookings, onTab, onNew }) {
 /* ═══════════════════════════════════════════
    ALL BOOKINGS LIST
 ═══════════════════════════════════════════ */
-function BookingsList({ bookings, onEdit, onPrint, onCancel, onRestore, onDelete }) {
+function BookingsList({ bookings, onView, onEdit, onPrint, onCancel, onRestore, onDelete }) {
   const [search, setSearch]   = useState("");
   const [fStatus, setFStatus] = useState("All");
   const [fHall, setFHall]     = useState("All");
@@ -1007,7 +1139,7 @@ function BookingsList({ bookings, onEdit, onPrint, onCancel, onRestore, onDelete
         <table style={{ width:"100%", borderCollapse:"collapse", minWidth:1000 }}>
           <thead>
             <tr style={{ background:"#5C0E0E", color:"white" }}>
-              {["ID","Customer","Event","Date","Hall","Slot","Total","Advance","Balance","Status","Actions"].map(h => (
+              {["ID","Customer","Event","Date","Hall","Total","Advance","Balance","Status","Actions"].map(h => (
                 <th key={h} style={{ padding:"11px 10px", textAlign:"left", fontSize:10,
                   fontWeight:700, letterSpacing:.7, textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>
               ))}
@@ -1034,15 +1166,13 @@ function BookingsList({ bookings, onEdit, onPrint, onCancel, onRestore, onDelete
                   </td>
                   <td style={{ padding:"10px", fontSize:11, whiteSpace:"nowrap" }}>{fmtDate(b.eventDate)}</td>
                   <td style={{ padding:"10px", fontSize:11 }}>{hallLabel(b.hallId)}</td>
-                  <td style={{ padding:"10px", fontSize:10, color:"#666", maxWidth:140 }}>
-                    {SLOTS.find(s=>s.id===b.slotId)?.label.split("—")[0] || b.slotId}
-                  </td>
                   <td style={{ padding:"10px", fontWeight:700, fontSize:13 }}>{fmt(b.totalAmount)}</td>
                   <td style={{ padding:"10px", color:"#2D6A4F", fontWeight:600, fontSize:12 }}>{fmt(b.advanceAmount)}</td>
                   <td style={{ padding:"10px", fontWeight:700, fontSize:13, color:bal>0?"#C9A227":"#2D6A4F" }}>{fmt(bal)}</td>
                   <td style={{ padding:"10px" }}><StatusBadge status={b.status} /></td>
                   <td style={{ padding:"10px" }}>
                     <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
+                      <Btn icon="👁️" title="View" onClick={() => onView(b)} bg="#e3f2fd" />
                       {!isCancelled && <>
                         <Btn icon="✏️" title="Edit"            onClick={() => onEdit(b)}                   bg="#f0f0f0" />
                         <Btn icon="📋" title="Quotation"       onClick={() => onPrint("quotation",b)}      bg="#e8f0fe" />
@@ -1078,7 +1208,7 @@ function BookingsList({ bookings, onEdit, onPrint, onCancel, onRestore, onDelete
 /* ═══════════════════════════════════════════
    FIND BOOKING (For Dedicated Modify / Cancel Tabs)
 ═══════════════════════════════════════════ */
-function FindBooking({ title, icon, actionLabel, bookings, onSelect, actionBg }) {
+function FindBooking({ title, icon, actionLabel, bookings, onSelect, actionBg, onView }) {
   const [search, setSearch] = useState("");
 
   const activeBookings = bookings.filter(b => b.status === "Active" || b.status === "Modified");
@@ -1140,11 +1270,18 @@ function FindBooking({ title, icon, actionLabel, bookings, onSelect, actionBg })
                         <div style={{ fontSize:12, color:"#888" }}>{b.eventType}</div>
                       </td>
                       <td style={{ padding:"14px", textAlign:"right", verticalAlign:"middle" }}>
-                        <button onClick={() => onSelect(b)} style={{
-                          background:actionBg, color:"white", border:"none",
-                          padding:"10px 20px", borderRadius:5, fontWeight:700, fontSize:13 }}>
-                          {actionLabel}
-                        </button>
+                        <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                          <button onClick={() => onView(b)} style={{
+                            background:"#e3f2fd", color:"#0D47A1", border:"none",
+                            padding:"10px 14px", borderRadius:5, fontWeight:700, fontSize:13 }}>
+                            👁️ View Details
+                          </button>
+                          <button onClick={() => onSelect(b)} style={{
+                            background:actionBg, color:"white", border:"none",
+                            padding:"10px 20px", borderRadius:5, fontWeight:700, fontSize:13 }}>
+                            {actionLabel}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1287,7 +1424,7 @@ function DeleteModal({ booking, onConfirm, onClose }) {
 /* ═══════════════════════════════════════════
    GUEST HISTORY
 ═══════════════════════════════════════════ */
-function GuestHistory({ bookings }) {
+function GuestHistory({ bookings, onView, onEdit, onCancel }) {
   const [phone, setPhone] = useState("");
 
   const filteredBookings = phone.trim().length >= 4 ? bookings.filter(b => 
@@ -1342,6 +1479,7 @@ function GuestHistory({ bookings }) {
                     <th key={h} style={{ padding:"11px 10px", textAlign:"left", fontSize:10,
                       fontWeight:700, letterSpacing:.7, textTransform:"uppercase" }}>{h}</th>
                   ))}
+                  <th style={{ padding:"11px 10px", textAlign:"right", fontSize:10, fontWeight:700, letterSpacing:.7, textTransform:"uppercase" }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1357,6 +1495,17 @@ function GuestHistory({ bookings }) {
                     <td style={{ padding:"10px", fontSize:12 }}>{hallLabel(b.hallId)}</td>
                     <td style={{ padding:"10px", fontWeight:700, fontSize:13 }}>{fmt(b.totalAmount)}</td>
                     <td style={{ padding:"10px" }}><StatusBadge status={b.status} /></td>
+                    <td style={{ padding:"10px", textAlign:"right" }}>
+                      <div style={{ display:"flex", gap:4, justifyContent:"flex-end" }}>
+                        <Btn icon="👁️" title="View Details" onClick={() => onView(b)} bg="#e3f2fd" />
+                        {b.status !== "Cancelled" && (
+                          <>
+                            <Btn icon="✏️" title="Edit Booking" onClick={() => onEdit(b)} bg="#f0f0f0" />
+                            <Btn icon="❌" title="Cancel Booking" onClick={() => onCancel(b.id)} bg="#fff0f0" />
+                          </>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1586,6 +1735,7 @@ export default function App() {
   const [bookings, setBookings]     = useState(loadBookings);
   const [activeTab, setActiveTab]   = useState("dashboard");
   const [printDoc, setPrintDoc]     = useState(null);
+  const [viewing, setViewing]       = useState(null);
   const [editing, setEditing]       = useState(null);
   const [cancelling, setCancelling] = useState(null);
   const [deleting, setDeleting]     = useState(null);
@@ -1602,16 +1752,30 @@ export default function App() {
 
   const saveBooking = (b) => {
     let finalBooking = { ...b };
+    const nowIso = new Date().toISOString();
     
     if (!finalBooking.id) {
-      // Create new sequence ID
+      // Nayi Booking
       finalBooking.id = generateNextBookingId(bookings);
       finalBooking.status = "Active";
+      finalBooking.history = [{ action: "Created Booking", date: nowIso }];
     } else {
-      // Edit existing
+      // Modify Existing
       const existing = bookings.find(x => x.id === finalBooking.id);
-      if (existing && existing.status !== "Quoted") {
-         finalBooking.status = finalBooking.status === "Active" ? "Modified" : finalBooking.status;
+      if (existing) {
+         // Purana data save karo history log mein
+         finalBooking.history = [...(existing.history || []), {
+           action: "Modified",
+           date: nowIso,
+           previousTotal: existing.totalAmount,
+           previousAdvance: existing.advanceAmount,
+           previousDate: existing.eventDate,
+           previousHall: existing.hallId
+         }];
+         
+         if (existing.status !== "Quoted" && existing.status !== "Cancelled") {
+            finalBooking.status = "Modified";
+         }
       }
     }
 
@@ -1635,7 +1799,8 @@ export default function App() {
       if (b.id === id) {
         cancelledB = {
           ...b, status:"Cancelled", cancelReason:reason, cancelledOn:todayStr(),
-          retentionAmount: retention, refundAmount: refund
+          retentionAmount: retention, refundAmount: refund,
+          history: [...(b.history || []), { action: "Cancelled", date: new Date().toISOString(), reason }]
         };
         return cancelledB;
       }
@@ -1646,7 +1811,10 @@ export default function App() {
   };
 
   const handleRestore = (id) => {
-    setBookings(prev => prev.map(b => b.id===id ? { ...b, status:"Active" } : b));
+    setBookings(prev => prev.map(b => b.id===id ? { 
+      ...b, status:"Active", 
+      history: [...(b.history || []), { action: "Restored from Cancellation", date: new Date().toISOString() }] 
+    } : b));
   };
 
   const handlePermanentDelete = (id) => {
@@ -1678,6 +1846,9 @@ export default function App() {
 
       {printDoc && (
         <PrintDoc type={printDoc.type} booking={printDoc.booking} onClose={()=>setPrintDoc(null)} />
+      )}
+      {viewing && (
+        <ViewModal booking={viewing} onClose={() => setViewing(null)} />
       )}
       {successBooking && (
         <SuccessModal 
@@ -1755,7 +1926,14 @@ export default function App() {
       {/* Main content */}
       <div style={{ padding:"26px 28px" }}>
         {activeTab==="dashboard" && !editing && (
-          <Dashboard bookings={bookings} onTab={setActiveTab} onNew={()=>setActiveTab("new-booking")} />
+          <Dashboard 
+            bookings={bookings} 
+            onTab={setActiveTab} 
+            onNew={()=>setActiveTab("new-booking")}
+            onView={b => setViewing(b)}
+            onEdit={b => setEditing(b)}
+            onCancel={id => setCancelling(bookings.find(b=>b.id===id))} 
+          />
         )}
         {(activeTab==="new-booking" || editing) && (
           <BookingForm
@@ -1768,15 +1946,16 @@ export default function App() {
         )}
         {activeTab==="modify-booking" && !editing && (
           <FindBooking title="Modify Booking" icon="✏️" actionLabel="Edit Booking"
-            bookings={bookings} onSelect={b => setEditing(b)} actionBg="#5C0E0E" />
+            bookings={bookings} onSelect={b => setEditing(b)} actionBg="#5C0E0E" onView={b => setViewing(b)} />
         )}
         {activeTab==="cancel-booking" && !editing && (
           <FindBooking title="Cancel Booking" icon="❌" actionLabel="Cancel Booking"
-            bookings={bookings} onSelect={b => setCancelling(b)} actionBg="#B71C1C" />
+            bookings={bookings} onSelect={b => setCancelling(b)} actionBg="#B71C1C" onView={b => setViewing(b)} />
         )}
         {activeTab==="bookings" && !editing && (
           <BookingsList
             bookings={bookings}
+            onView={b => setViewing(b)}
             onEdit={(b)=>{ setEditing(b); }}
             onPrint={(type,b)=>setPrintDoc({type,booking:b})}
             onCancel={(id)=>setCancelling(bookings.find(b=>b.id===id))}
@@ -1784,7 +1963,7 @@ export default function App() {
             onDelete={(id)=>setDeleting(bookings.find(b=>b.id===id))} />
         )}
         {activeTab==="calendar" && !editing && <CalendarView bookings={bookings} />}
-        {activeTab==="guest-history" && !editing && <GuestHistory bookings={bookings} />}
+        {activeTab==="guest-history" && !editing && <GuestHistory bookings={bookings} onView={b => setViewing(b)} onEdit={b => setEditing(b)} onCancel={id => setCancelling(bookings.find(b=>b.id===id))} />}
         {activeTab==="pricing" && !editing && <PricingRef />}
         {activeTab==="terms" && !editing && (
           <div style={{ background:"white", borderRadius:8, padding:28, boxShadow:"0 2px 10px rgba(0,0,0,.07)", maxWidth:960, margin:"0 auto" }}>
