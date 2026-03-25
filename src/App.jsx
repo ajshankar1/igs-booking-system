@@ -158,6 +158,11 @@ const generateNextBookingId = (currentBookings) => {
 
 const fmt      = (n) => "₹" + Number(n || 0).toLocaleString("en-IN");
 const fmtDate  = (s) => s ? new Date(s + "T00:00:00").toLocaleDateString("en-IN",{ day:"2-digit", month:"long", year:"numeric" }) : "—";
+const fmtDateTime = (isoString) => {
+  if (!isoString) return "—";
+  const d = new Date(isoString);
+  return d.toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" }) + " " + d.toLocaleTimeString("en-IN", { hour: '2-digit', minute: '2-digit' });
+};
 const todayStr = () => new Date().toISOString().split("T")[0];
 const gst      = (base) => Math.round(base * VENUE.gst);
 const total    = (base) => base + gst(base);
@@ -271,7 +276,7 @@ function ViewModal({ booking, onClose }) {
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.6)",
       zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"white", borderRadius:8, padding:28, maxWidth:760, width:"100%",
+      <div style={{ background:"white", borderRadius:8, padding:28, maxWidth:860, width:"100%",
         boxShadow:"0 20px 60px rgba(0,0,0,.4)", maxHeight:"90vh", overflowY:"auto" }}>
         
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, borderBottom:"2px solid #f0e8d8", paddingBottom:12 }}>
@@ -348,39 +353,66 @@ function ViewModal({ booking, onClose }) {
           </div>
         )}
 
-        {/* ACTIVITY LOG - MODIFICATION HISTORY */}
-        {booking.history && booking.history.length > 0 && (
-          <div style={{ marginTop:20, padding:16, background:"#fff", border:"1px solid #eee", borderRadius:6 }}>
-            <h4 style={{ color:"#555", marginBottom:12, textTransform:"uppercase", fontSize:12, letterSpacing:1 }}>⏳ Activity & Modification Log</h4>
-            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              {booking.history.map((h, idx) => {
-                let borderColor = "#1B5E20"; // Created/Restored
-                if (h.action === "Modified") borderColor = "#E65100";
-                if (h.action === "Cancelled") borderColor = "#B71C1C";
-
-                return (
-                  <div key={idx} style={{ padding:"10px 14px", background:"#f9f9f9", borderRadius:4, borderLeft:`4px solid ${borderColor}` }}>
-                    <div style={{ fontSize:13, fontWeight:700, color:"#333", marginBottom:4 }}>
-                      {h.action} <span style={{ fontWeight:400, color:"#888" }}>on {new Date(h.date).toLocaleString("en-IN")}</span>
-                    </div>
-                    {h.action === "Modified" && (
-                      <div style={{ fontSize:12, color:"#555", lineHeight:1.6 }}>
-                        <strong>Previous Value:</strong><br/>
-                        Event Date: {fmtDate(h.previousDate)} &nbsp;|&nbsp; 
-                        Hall: {hallLabel(h.previousHall)} &nbsp;|&nbsp; 
-                        Total: {fmt(h.previousTotal)} &nbsp;|&nbsp; 
-                        Advance: {fmt(h.previousAdvance)}
-                      </div>
-                    )}
-                    {h.action === "Cancelled" && (
-                      <div style={{ fontSize:12, color:"#B71C1C" }}>Reason: {h.reason || "None"}</div>
-                    )}
-                  </div>
-                );
-              })}
+        {/* ⏳ TIMELINE & ACTIVITY LOG */}
+        <div style={{ marginTop:20, padding:16, background:"#fff", border:"1px solid #eee", borderRadius:6 }}>
+          <h4 style={{ color:"#555", marginBottom:16, textTransform:"uppercase", fontSize:12, letterSpacing:1 }}>⏳ Booking Timeline & History</h4>
+          
+          <div style={{ borderLeft: "2px solid #e8d8b8", marginLeft: "10px", paddingLeft: "20px", display:"flex", flexDirection:"column", gap:20 }}>
+            
+            {/* Step 1: Original Creation */}
+            <div style={{ position: "relative" }}>
+              <div style={{ position: "absolute", left: "-27px", top: "4px", width: "12px", height: "12px", borderRadius: "50%", background: "#2D6A4F", border:"2px solid white", outline:"2px solid #2D6A4F" }}></div>
+              <div style={{ fontSize:14, fontWeight:700, color:"#1B5E20" }}>Original Booking Created</div>
+              <div style={{ fontSize:12, color:"#888", marginBottom:4 }}>{fmtDateTime(booking.createdOn)}</div>
+              <div style={{ fontSize:13, color:"#444", background:"#f9f9f9", padding:"8px 12px", borderRadius:4, display:"inline-block" }}>
+                <strong>Initial Event Date:</strong> {fmtDate(booking.history?.[0]?.eventDate || booking.eventDate)}<br/>
+                <strong>Initial Hall:</strong> {hallLabel(booking.history?.[0]?.hall || booking.hallId)}
+              </div>
             </div>
+
+            {/* Step 2+: Modifications & Cancellations */}
+            {booking.history && booking.history.slice(1).map((h, idx) => {
+              let dotColor = "#C9A227"; // Modified
+              let titleColor = "#E65100";
+              let title = "Booking Modified";
+
+              if (h.action === "Cancelled") {
+                dotColor = "#B71C1C";
+                titleColor = "#B71C1C";
+                title = "Booking Cancelled";
+              } else if (h.action === "Restored") {
+                dotColor = "#2D6A4F";
+                titleColor = "#1B5E20";
+                title = "Booking Restored (Un-cancelled)";
+              }
+
+              return (
+                <div key={idx} style={{ position: "relative" }}>
+                  <div style={{ position: "absolute", left: "-27px", top: "4px", width: "12px", height: "12px", borderRadius: "50%", background: dotColor, border:"2px solid white", outline:`2px solid ${dotColor}` }}></div>
+                  <div style={{ fontSize:14, fontWeight:700, color:titleColor }}>{title}</div>
+                  <div style={{ fontSize:12, color:"#888", marginBottom:4 }}>{fmtDateTime(h.date)}</div>
+                  
+                  {h.action === "Modified" && (
+                    <div style={{ fontSize:13, color:"#444", background:"#FFF3E0", border:"1px solid #FFE0B2", padding:"8px 12px", borderRadius:4, display:"inline-block" }}>
+                      <strong>Changed From:</strong><br/>
+                      Date: {fmtDate(h.previousDate)} &nbsp;|&nbsp; Hall: {hallLabel(h.previousHall)}<br/>
+                      <strong style={{color:"#E65100"}}>Changed To:</strong><br/>
+                      Date: {fmtDate(h.newDate)} &nbsp;|&nbsp; Hall: {hallLabel(h.newHall)}
+                    </div>
+                  )}
+
+                  {h.action === "Cancelled" && (
+                    <div style={{ fontSize:13, color:"#B71C1C", background:"#FFEBEE", border:"1px solid #FFCDD2", padding:"8px 12px", borderRadius:4, display:"inline-block" }}>
+                      <strong>Reason for Cancellation:</strong> {h.reason || "None provided"}<br/>
+                      <strong>Refund:</strong> {fmt(h.refund)} &nbsp;|&nbsp; <strong>Retention:</strong> {fmt(h.retention)}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-        )}
+        </div>
+
       </div>
     </div>
   );
@@ -803,7 +835,7 @@ function BookingForm({ existing, onSave, onCancel }) {
     setErrorMsg("");
     onSave({
       ...form,
-      createdOn:    existing?.createdOn || todayStr(),
+      createdOn:    existing?.createdOn || new Date().toISOString(),
       baseAmount:   base,
       gstAmount:    gstA,
       totalAmount:  totA,
@@ -1003,7 +1035,7 @@ function Dashboard({ bookings, onTab, onNew, onView, onEdit, onCancel }) {
   const totalRev = active.reduce((s,b) => s + (b.totalAmount||0), 0);
   const totalAdv = active.reduce((s,b) => s + (b.advanceAmount||0), 0);
   const nextEvt  = [...upcoming].sort((a,b) => a.eventDate.localeCompare(b.eventDate))[0];
-  const recent   = [...bookings].sort((a,b) => b.createdOn.localeCompare(a.createdOn)).slice(0,6);
+  const recent   = [...bookings].sort((a,b) => (b.createdOn || "").localeCompare(a.createdOn || "")).slice(0,6);
 
   const stats = [
     { label:"Total Bookings",    value:active.length,   icon:"📋", color:"#5C0E0E" },
@@ -1067,7 +1099,10 @@ function Dashboard({ bookings, onTab, onNew, onView, onEdit, onCancel }) {
             <tbody>
               {recent.map((b,i) => (
                 <tr key={b.id} style={{ borderBottom:"1px solid #f5ebe0", background:i%2===0?"white":"#fdfaf5" }}>
-                  <td style={{ padding:"11px 12px", color:"#C9A227", fontWeight:700, fontSize:12 }}>{b.id}</td>
+                  <td style={{ padding:"11px 12px", color:"#C9A227", fontWeight:700, fontSize:12 }}>
+                    {b.id}
+                    <div style={{ fontSize:10, color:"#999", fontWeight:400, marginTop:2 }}>Booked: {fmtDate(b.createdOn)}</div>
+                  </td>
                   <td style={{ padding:"11px 12px", fontWeight:600, fontSize:13 }}>
                     {fullName(b)}
                     <div style={{ fontSize:11, color:"#aaa", fontWeight:400 }}>{b.primaryCc} {b.primaryPhone}</div>
@@ -1147,7 +1182,7 @@ function BookingsList({ bookings, onView, onEdit, onPrint, onCancel, onRestore, 
           </thead>
           <tbody>
             {filtered.length === 0 ? (
-              <tr><td colSpan={11} style={{ textAlign:"center", padding:40, color:"#bbb" }}>No bookings found.</td></tr>
+              <tr><td colSpan={10} style={{ textAlign:"center", padding:40, color:"#bbb" }}>No bookings found.</td></tr>
             ) : filtered.map((b,i) => {
               const bal = (b.totalAmount||0) - (b.advanceAmount||0);
               const isCancelled = b.status === "Cancelled";
@@ -1155,7 +1190,10 @@ function BookingsList({ bookings, onView, onEdit, onPrint, onCancel, onRestore, 
                 <tr key={b.id} style={{ borderBottom:"1px solid #f5ebe0",
                   background:isCancelled?"#fff5f5": i%2===0?"white":"#fdfaf5",
                   opacity:isCancelled?.7:1 }}>
-                  <td style={{ padding:"10px", color:"#C9A227", fontWeight:700, fontSize:11 }}>{b.id}</td>
+                  <td style={{ padding:"10px", color:"#C9A227", fontWeight:700, fontSize:11 }}>
+                    {b.id}
+                    <div style={{ fontSize:10, color:"#999", fontWeight:400, marginTop:2 }}>Booked: {fmtDate(b.createdOn)}</div>
+                  </td>
                   <td style={{ padding:"10px" }}>
                     <div style={{ fontWeight:700, fontSize:13 }}>{fullName(b)}</div>
                     <div style={{ fontSize:11, color:"#aaa" }}>{b.primaryCc} {b.primaryPhone}</div>
@@ -1485,7 +1523,10 @@ function GuestHistory({ bookings, onView, onEdit, onCancel }) {
               <tbody>
                 {filteredBookings.map((b,i) => (
                   <tr key={b.id} style={{ borderBottom:"1px solid #f5ebe0", background:i%2===0?"white":"#fdfaf5" }}>
-                    <td style={{ padding:"10px", color:"#C9A227", fontWeight:700, fontSize:11 }}>{b.id}</td>
+                    <td style={{ padding:"10px", color:"#C9A227", fontWeight:700, fontSize:11 }}>
+                      {b.id}
+                      <div style={{ fontSize:10, color:"#999", fontWeight:400, marginTop:2 }}>Booked: {fmtDate(b.createdOn)}</div>
+                    </td>
                     <td style={{ padding:"10px" }}>
                       <div style={{ fontWeight:700, fontSize:13 }}>{fullName(b)}</div>
                       <div style={{ fontSize:11, color:"#aaa" }}>{b.primaryCc} {b.primaryPhone}</div>
@@ -1758,20 +1799,32 @@ export default function App() {
       // Nayi Booking
       finalBooking.id = generateNextBookingId(bookings);
       finalBooking.status = "Active";
-      finalBooking.history = [{ action: "Created Booking", date: nowIso }];
+      finalBooking.createdOn = nowIso;
+      finalBooking.history = [{ 
+        action: "Booking Created", 
+        date: nowIso,
+        eventDate: finalBooking.eventDate,
+        hall: finalBooking.hallId
+      }];
     } else {
       // Modify Existing
       const existing = bookings.find(x => x.id === finalBooking.id);
       if (existing) {
-         // Purana data save karo history log mein
-         finalBooking.history = [...(existing.history || []), {
-           action: "Modified",
-           date: nowIso,
-           previousTotal: existing.totalAmount,
-           previousAdvance: existing.advanceAmount,
-           previousDate: existing.eventDate,
-           previousHall: existing.hallId
-         }];
+         finalBooking.history = [...(existing.history || [])];
+         
+         // Agar details badli hain tabhi history me daalein
+         if (existing.eventDate !== finalBooking.eventDate || existing.hallId !== finalBooking.hallId || existing.totalAmount !== finalBooking.totalAmount) {
+             finalBooking.history.push({
+               action: "Modified",
+               date: nowIso,
+               previousTotal: existing.totalAmount,
+               newTotal: finalBooking.totalAmount,
+               previousDate: existing.eventDate,
+               newDate: finalBooking.eventDate,
+               previousHall: existing.hallId,
+               newHall: finalBooking.hallId
+             });
+         }
          
          if (existing.status !== "Quoted" && existing.status !== "Cancelled") {
             finalBooking.status = "Modified";
@@ -1798,9 +1851,9 @@ export default function App() {
     setBookings(prev => prev.map(b => {
       if (b.id === id) {
         cancelledB = {
-          ...b, status:"Cancelled", cancelReason:reason, cancelledOn:todayStr(),
+          ...b, status:"Cancelled", cancelReason:reason, cancelledOn:new Date().toISOString(),
           retentionAmount: retention, refundAmount: refund,
-          history: [...(b.history || []), { action: "Cancelled", date: new Date().toISOString(), reason }]
+          history: [...(b.history || []), { action: "Cancelled", date: new Date().toISOString(), reason, refund, retention }]
         };
         return cancelledB;
       }
@@ -1813,7 +1866,7 @@ export default function App() {
   const handleRestore = (id) => {
     setBookings(prev => prev.map(b => b.id===id ? { 
       ...b, status:"Active", 
-      history: [...(b.history || []), { action: "Restored from Cancellation", date: new Date().toISOString() }] 
+      history: [...(b.history || []), { action: "Restored", date: new Date().toISOString() }] 
     } : b));
   };
 
